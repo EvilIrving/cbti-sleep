@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:insta_assets_picker/insta_assets_picker.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import 'video_editor_screen.dart';
 
@@ -14,32 +14,44 @@ class VideoPickerAndPreviewScreen extends StatefulWidget {
 }
 
 class _VideoPickerAndPreviewScreenState extends State<VideoPickerAndPreviewScreen> {
-  VideoPlayerController? _videoPlayerController;
-  String? _videoPath;
-
   @override
   void dispose() {
-    _videoPlayerController?.dispose();
     super.dispose();
   }
 
   Future<void> _pickVideo() async {
     try {
-      debugPrint('[VideoPicker] Opening file picker...');
-      final FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
-        allowMultiple: false,
+      debugPrint('[VideoPicker] Opening insta assets picker...');
+      
+      final List<AssetEntity>? assets = await InstaAssetPicker.pickAssets(
+        context,
+        pickerConfig: const InstaAssetPickerConfig(
+          title: '选择视频',
+          // 禁用裁剪功能，因为我们有自己的视频编辑器
+          cropDelegate: InstaAssetCropDelegate(
+            cropRatios: [1.0], // 只有一个比例，这样就不会显示裁剪界面
+          ),
+        ),
+        maxAssets: 1, // 只允许选择一个视频
+        onCompleted: (Stream<InstaAssetsExportDetails> stream) {
+          // 这里我们不需要处理裁剪流，直接在选择完成后处理
+        },
       );
 
-      if (result == null) {
-        debugPrint('[VideoPicker] User canceled file picking');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未选择文件')));
+      if (assets == null || assets.isEmpty) {
+        debugPrint('[VideoPicker] User canceled or no assets selected');
         return;
       }
-      final String? path = result.files.single.path;
-      if (path == null || path.isEmpty) {
-        debugPrint('[VideoPicker] Picked result but no path');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未获取到文件路径')));
+
+      // 获取选中的视频文件
+      final AssetEntity asset = assets.first;
+      final File? file = await asset.file;
+      
+      if (file == null) {
+        debugPrint('[VideoPicker] Failed to get file from asset');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('获取视频文件失败')));
+        }
         return;
       }
 
@@ -48,10 +60,9 @@ class _VideoPickerAndPreviewScreenState extends State<VideoPickerAndPreviewScree
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => VideoEditorScreen(videoPath: path),
+          builder: (context) => VideoEditorScreen(videoPath: file.path),
         ),
       );
-      return;
     } catch (e) {
       debugPrint('[VideoPicker] Exception: $e');
       if (mounted) {
@@ -60,15 +71,6 @@ class _VideoPickerAndPreviewScreenState extends State<VideoPickerAndPreviewScree
     }
   }
 
-  Future<void> _initializeVideoPlayer() async {
-    // 预览页不再使用，保留以防后续需要
-    if (_videoPath == null) return;
-    _videoPlayerController?.dispose();
-    _videoPlayerController = VideoPlayerController.file(File(_videoPath!));
-    await _videoPlayerController!.initialize();
-    setState(() {});
-    await _videoPlayerController!.setLooping(false);
-  }
 
   @override
   Widget build(BuildContext context) {
