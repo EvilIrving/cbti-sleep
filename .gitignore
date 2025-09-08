@@ -41,3 +41,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Large files and archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+gradle.zip
+
+# Gradle wrapper (keep only the necessary files)
+gradle/wrapper/gradle-wrapper.jar
