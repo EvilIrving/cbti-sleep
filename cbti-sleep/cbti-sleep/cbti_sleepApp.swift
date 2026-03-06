@@ -1,10 +1,3 @@
-//
-//  cbti_sleepApp.swift
-//  cbti-sleep
-//
-//  Created by Actor on 2026/3/6.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,7 +5,10 @@ import SwiftData
 struct cbti_sleepApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            SleepDiaryEntry.self,
+            SleepWindow.self,
+            DailyTask.self,
+            CBTISessionConfig.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
