@@ -69,11 +69,10 @@
 │  首页       记录       统计       课程       设置   │
 └─────────────────────────────────────────────────────┘
 
-✓ Max 5 tabs (Apple HIG)
+✓ Max 4 tabs (Apple HIG)
 ✓ 首页 = Home = 任务 + 进度 + 计划
 ✓ 记录 = Log = 每日睡眠记录
 ✓ 统计 = Statistics = 可视化分析
-✓ 课程 = Guide = CBT-i 教育内容
 ✓ 设置 = Settings = 个人配置
 ```
 
@@ -361,8 +360,8 @@ View Mode                    Edit Mode
 
 ✓ Banner (persistent info):
 ┌─────────────────────────────┐
-│  ⚠️ iCloud Sync Required    │
-│  Sign in to sync data       │
+│  ✓ 数据仅保存在本地         │
+│  无需登录即可使用           │
 └─────────────────────────────┘
 
 ✓ ProgressView (loading):
@@ -474,8 +473,9 @@ View Mode                    Edit Mode
 | 🏠 首页 | Home | Daily task, progress, sleep plan |
 | 📝 记录 | Log | Sleep entry, edit, delete |
 | 📊 统计 | Statistics | Charts, trends, insights |
-| 📚 课程 | Guide | CBT-i education content |
 | ⚙️ 设置 | Settings | Profile, notifications |
+
+本产品不提供独立的 CBT-i 课程页；教育内容通过首页任务和记录流程自然呈现。
 
 ### Navigation Patterns
 
@@ -530,9 +530,6 @@ Button(action: save) {
 | P1 | 疗程进度追踪 | Medium |
 | P1 | 睡眠记录列表 | Low |
 | P1 | 睡眠统计图表 | Medium |
-| P2 | CBT-i 课程内容 | High |
-| P2 | 数据导出 | Medium |
-| P3 | 云端同步 | High |
 
 ### P0 关键路径
 
