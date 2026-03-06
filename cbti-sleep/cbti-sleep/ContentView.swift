@@ -135,15 +135,18 @@ struct ContentView: View {
 }
 
 private enum SleepPalette {
-    static let background = Color(red: 0.97, green: 0.96, blue: 0.93)
-    static let card = Color.white.opacity(0.92)
-    static let night = Color(red: 0.11, green: 0.15, blue: 0.30)
-    static let indigo = Color(red: 0.41, green: 0.44, blue: 0.91)
-    static let lavender = Color(red: 0.86, green: 0.88, blue: 1.00)
-    static let yellow = Color(red: 0.96, green: 0.84, blue: 0.28)
-    static let green = Color(red: 0.34, green: 0.73, blue: 0.49)
-    static let pink = Color(red: 0.94, green: 0.72, blue: 0.84)
-    static let textSoft = Color(red: 0.43, green: 0.46, blue: 0.56)
+    static let backgroundTop = Color(red: 0.05, green: 0.08, blue: 0.16)
+    static let backgroundBottom = Color(red: 0.02, green: 0.03, blue: 0.08)
+    static let card = Color.white.opacity(0.06)
+    static let cardStrong = Color.white.opacity(0.10)
+    static let night = Color(red: 0.86, green: 0.90, blue: 1.00)
+    static let indigo = Color(red: 0.46, green: 0.55, blue: 0.96)
+    static let lavender = Color(red: 0.64, green: 0.70, blue: 0.96)
+    static let yellow = Color(red: 0.72, green: 0.68, blue: 0.94)
+    static let green = Color(red: 0.53, green: 0.69, blue: 0.78)
+    static let pink = Color(red: 0.64, green: 0.60, blue: 0.86)
+    static let textSoft = Color.white.opacity(0.62)
+    static let textFaint = Color.white.opacity(0.38)
 }
 
 private struct QuickLogDraft {
@@ -175,16 +178,23 @@ private struct QuickLogDraft {
 private struct AppBackground: View {
     var body: some View {
         LinearGradient(
-            colors: [SleepPalette.background, Color.white],
-            startPoint: .top,
-            endPoint: .bottom
+            colors: [SleepPalette.backgroundTop, SleepPalette.backgroundBottom],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
         .overlay(alignment: .topTrailing) {
             Circle()
-                .fill(SleepPalette.lavender.opacity(0.55))
-                .frame(width: 220, height: 220)
-                .blur(radius: 18)
-                .offset(x: 90, y: -60)
+                .fill(SleepPalette.indigo.opacity(0.28))
+                .frame(width: 300, height: 300)
+                .blur(radius: 60)
+                .offset(x: 110, y: -70)
+        }
+        .overlay(alignment: .bottomLeading) {
+            Circle()
+                .fill(SleepPalette.lavender.opacity(0.16))
+                .frame(width: 260, height: 260)
+                .blur(radius: 70)
+                .offset(x: -80, y: 80)
         }
         .ignoresSafeArea()
     }
@@ -227,7 +237,7 @@ private struct DashboardHeader: View {
                 Text(greeting)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(SleepPalette.textSoft)
-                Text("今晚继续把睡眠拉回正轨")
+                Text("Sleep")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(SleepPalette.night)
                     .fixedSize(horizontal: false, vertical: true)
@@ -235,9 +245,9 @@ private struct DashboardHeader: View {
             Spacer()
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(0.85))
+                    .fill(Color.white.opacity(0.08))
                     .frame(width: 48, height: 48)
-                    .shadow(color: .black.opacity(0.06), radius: 18, y: 8)
+                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
                 Image(systemName: "moon.zzz.fill")
                     .foregroundStyle(SleepPalette.night)
             }
@@ -263,36 +273,40 @@ private struct HeroSleepCard: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("今夜睡眠窗口")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.8))
+                    Text("Tonight")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SleepPalette.textSoft)
                     Text(windowText)
                         .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("固定起床时间比“早点睡”更重要")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.76))
+                        .foregroundStyle(SleepPalette.night)
                 }
                 Spacer()
                 VStack(spacing: 10) {
                     GlowOrb()
                     Text("\(Int(completionRate * 100))%")
                         .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(SleepPalette.textSoft)
                 }
             }
             HStack(spacing: 10) {
-                HeroPill(title: "连续", value: "\(streak) 天")
-                HeroPill(title: "建议时长", value: durationText)
-                HeroPill(title: "起床", value: wakeText)
+                HeroPill(title: "streak", value: "\(streak)d")
+                HeroPill(title: "window", value: durationText)
+                HeroPill(title: "wake", value: wakeText)
             }
         }
         .padding(22)
         .background(
-            LinearGradient(colors: [SleepPalette.night, SleepPalette.indigo], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(
+                colors: [SleepPalette.cardStrong, Color.white.opacity(0.04)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
             in: RoundedRectangle(cornerRadius: 30, style: .continuous)
         )
-        .shadow(color: SleepPalette.indigo.opacity(0.28), radius: 24, y: 16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        )
     }
 
     private var start: Date { window?.start ?? suggestion.start }
@@ -318,14 +332,15 @@ private struct GlowOrb: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(.white.opacity(0.16))
-                .frame(width: 82, height: 82)
+                .fill(SleepPalette.indigo.opacity(0.22))
+                .frame(width: 92, height: 92)
+                .blur(radius: 12)
             Circle()
-                .fill(.white.opacity(0.14))
-                .frame(width: 58, height: 58)
+                .fill(Color.white.opacity(0.10))
+                .frame(width: 60, height: 60)
             Image(systemName: "moon.stars.fill")
                 .font(.system(size: 24))
-                .foregroundStyle(.white)
+                .foregroundStyle(SleepPalette.night)
         }
     }
 }
@@ -338,15 +353,15 @@ private struct HeroPill: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(.white.opacity(0.68))
+                .foregroundStyle(SleepPalette.textFaint)
             Text(value)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SleepPalette.night)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -357,9 +372,9 @@ private struct InsightStrip: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            MiniStatCard(title: "睡眠效率", value: "\(Int(efficiency * 100))%", tint: SleepPalette.yellow, symbol: "bolt.fill")
-            MiniStatCard(title: "连胜记录", value: "\(streak) 天", tint: SleepPalette.green, symbol: "flame.fill")
-            MiniStatCard(title: "已记录", value: "\(entryCount)", tint: SleepPalette.pink, symbol: "calendar")
+            MiniStatCard(title: "eff", value: "\(Int(efficiency * 100))%", tint: SleepPalette.indigo, symbol: "moonphase.waning.gibbous")
+            MiniStatCard(title: "streak", value: "\(streak)", tint: SleepPalette.lavender, symbol: "sparkles")
+            MiniStatCard(title: "logs", value: "\(entryCount)", tint: SleepPalette.green, symbol: "calendar")
         }
     }
 }
@@ -373,10 +388,10 @@ private struct MiniStatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Image(systemName: symbol)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SleepPalette.night)
                 .frame(width: 34, height: 34)
-                .background(tint.opacity(0.9), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text(value)
                 .font(.headline.weight(.bold))
                 .foregroundStyle(SleepPalette.night)
@@ -387,7 +402,10 @@ private struct MiniStatCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(SleepPalette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.05), radius: 14, y: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -399,15 +417,15 @@ private struct FocusTaskCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("今日首要任务")
+                Text("Now")
                     .font(.headline.weight(.bold))
                 Spacer()
-                Text("\(Int(completionRate * 100))% 完成")
+                Text("\(Int(completionRate * 100))%")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(SleepPalette.night)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.8), in: Capsule())
+                    .background(Color.white.opacity(0.06), in: Capsule())
             }
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -415,26 +433,29 @@ private struct FocusTaskCard: View {
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(SleepPalette.night)
                     Text(task.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(SleepPalette.night.opacity(0.74))
+                        .font(.footnote)
+                        .foregroundStyle(SleepPalette.textSoft)
                 }
                 Spacer()
-                BlobFace(color: SleepPalette.green, mood: task.isCompleted ? "face.smiling.fill" : "face.dashed.fill")
+                BlobFace(color: SleepPalette.indigo, mood: task.isCompleted ? "moon.fill" : "moon.stars")
             }
             Button {
                 toggleTask(task)
             } label: {
-                Text(task.isCompleted ? "已完成，继续保持" : "标记完成")
+                Text(task.isCompleted ? "done" : "complete")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(task.isCompleted ? SleepPalette.night : .white)
+                    .foregroundStyle(SleepPalette.night)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(task.isCompleted ? Color.white.opacity(0.76) : SleepPalette.night, in: Capsule())
+                    .background(Color.white.opacity(0.08), in: Capsule())
             }
         }
         .padding(22)
-        .background(SleepPalette.yellow, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .shadow(color: SleepPalette.yellow.opacity(0.25), radius: 16, y: 10)
+        .background(SleepPalette.cardStrong, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -445,14 +466,13 @@ private struct BlobFace: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(color)
+                .fill(color.opacity(0.14))
                 .frame(width: 92, height: 92)
-                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(.white, lineWidth: 6))
+                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
             Image(systemName: mood)
-                .font(.system(size: 34))
+                .font(.system(size: 28))
                 .foregroundStyle(SleepPalette.night)
         }
-        .rotationEffect(.degrees(-8))
     }
 }
 
@@ -463,7 +483,7 @@ private struct WeekProgressCard: View {
         SleepCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("本周进展")
+                    Text("Week")
                         .font(.headline.weight(.bold))
                     Spacer()
                     Text("\(completedCount)/7")
@@ -475,12 +495,12 @@ private struct WeekProgressCard: View {
                         VStack(spacing: 8) {
                             ZStack {
                                 Circle()
-                                    .fill(done ? SleepPalette.night : Color.black.opacity(0.06))
+                                    .fill(done ? SleepPalette.indigo.opacity(0.85) : Color.white.opacity(0.06))
                                     .frame(width: 34, height: 34)
                                 if done {
                                     Image(systemName: "checkmark")
                                         .font(.caption.bold())
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(SleepPalette.night)
                                 }
                             }
                             Text(dayLabels[index])
@@ -507,18 +527,18 @@ private struct SleepPlanCard: View {
         SleepCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text("睡眠计划")
+                    Text("Window")
                         .font(.headline.weight(.bold))
                     Spacer()
                     Image(systemName: "waveform.path.ecg")
-                        .foregroundStyle(SleepPalette.indigo)
+                        .foregroundStyle(SleepPalette.textSoft)
                 }
                 HStack(spacing: 14) {
                     PlanMetric(title: "就寝", value: timeText(start))
                     PlanMetric(title: "起床", value: timeText(end))
                     PlanMetric(title: "时长", value: durationText)
                 }
-                Text("建议在睡意明显时再上床，不要为了“早点睡”提前躺平。")
+                Text("wait for sleepiness")
                     .font(.footnote)
                     .foregroundStyle(SleepPalette.textSoft)
             }
@@ -554,7 +574,7 @@ private struct PlanMetric: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(SleepPalette.lavender.opacity(0.45), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -563,35 +583,30 @@ private struct QuickCaptureCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("快速记录")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(SleepPalette.night)
-                    Text("像参考 app 那样，把主操作做成明确 CTA，而不是埋在表单里。")
-                        .font(.subheadline)
-                        .foregroundStyle(SleepPalette.night.opacity(0.72))
-                }
-                Spacer()
-                BlobFace(color: SleepPalette.pink, mood: "sparkles")
-            }
+            Text("Log")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(SleepPalette.night)
             Button {
                 onTap()
             } label: {
                 HStack {
-                    Image(systemName: "plus")
-                    Text("记录昨晚睡眠")
+                    Text("record last night")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
                 }
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SleepPalette.night)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
-                .background(SleepPalette.night, in: Capsule())
+                .padding(.horizontal, 2)
             }
         }
         .padding(22)
-        .background(SleepPalette.green, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .shadow(color: SleepPalette.green.opacity(0.2), radius: 16, y: 10)
+        .background(SleepPalette.cardStrong, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -602,7 +617,7 @@ private struct RecordsOverview: View {
         SleepCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("最近记录")
+                    Text("Recent")
                         .font(.headline.weight(.bold))
                     Spacer()
                     Text("\(entries.count) 条")
@@ -615,13 +630,13 @@ private struct RecordsOverview: View {
                             Text(dateText(recent.date))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(SleepPalette.night)
-                            Text("睡眠时长 \(recent.formattedDuration)")
+                            Text(recent.formattedDuration)
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(SleepPalette.night)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 6) {
-                            Text("主观感受")
+                            Text("quality")
                                 .font(.caption)
                                 .foregroundStyle(SleepPalette.textSoft)
                             Text("\(recent.sleepQuality)/10")
@@ -630,7 +645,7 @@ private struct RecordsOverview: View {
                         }
                     }
                 } else {
-                    Text("今晚开始第一条记录，让数据先流动起来。")
+                    Text("no entries yet")
                         .font(.subheadline)
                         .foregroundStyle(SleepPalette.textSoft)
                 }
@@ -652,29 +667,25 @@ private struct RecordsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(eyebrow: "睡眠日记", title: "昨晚发生了什么", subtitle: "保留连续记录，才能让 CBTI 的建议更可信。")
+                SectionHeader(eyebrow: "log", title: "Night notes", subtitle: "keep it simple")
                 Button {
                     addAction()
                 } label: {
                     HStack {
-                        Image(systemName: "plus.circle.fill")
-                        Text("新增一条记录")
+                        Text("new log")
                         Spacer()
                         Image(systemName: "chevron.right")
                     }
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SleepPalette.night)
                     .padding(18)
-                    .background(
-                        LinearGradient(colors: [SleepPalette.night, SleepPalette.indigo], startPoint: .leading, endPoint: .trailing),
-                        in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    )
+                    .background(SleepPalette.cardStrong, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
                 ForEach(entries) { entry in
                     DiaryEntryCard(entry: entry)
                 }
                 if entries.isEmpty {
-                    EmptyStateCard(title: "还没有睡眠日记", subtitle: "先从今天开始。一次 30 秒记录，比空白更有价值。", tint: SleepPalette.lavender)
+                    EmptyStateCard(title: "No logs", subtitle: "start tonight", tint: SleepPalette.indigo)
                 }
             }
             .padding(.horizontal, 20)
@@ -695,7 +706,7 @@ private struct DiaryEntryCard: View {
                         Text(dateText(entry.date))
                             .font(.headline.weight(.bold))
                             .foregroundStyle(SleepPalette.night)
-                        Text("入睡 \(timeText(entry.sleepStart))  ·  醒来 \(timeText(entry.wakeTime))")
+                        Text("\(timeText(entry.sleepStart))  ·  \(timeText(entry.wakeTime))")
                             .font(.subheadline)
                             .foregroundStyle(SleepPalette.textSoft)
                     }
@@ -704,16 +715,16 @@ private struct DiaryEntryCard: View {
                         Text(entry.formattedDuration)
                             .font(.title3.weight(.bold))
                             .foregroundStyle(SleepPalette.night)
-                        Text("质量 \(entry.sleepQuality)/10")
+                        Text("\(entry.sleepQuality)/10")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(SleepPalette.indigo)
                     }
                 }
                 HStack(spacing: 10) {
-                    DiaryTag(text: "\(entry.nightAwakenings) 次觉醒", tint: SleepPalette.yellow)
-                    DiaryTag(text: "屏幕 \(entry.screenTimeMinutes) 分钟", tint: SleepPalette.green)
+                    DiaryTag(text: "\(entry.nightAwakenings) wakes", tint: SleepPalette.pink)
+                    DiaryTag(text: "\(entry.screenTimeMinutes)m screen", tint: SleepPalette.indigo)
                     if entry.caffeineIntake {
-                        DiaryTag(text: "咖啡因", tint: SleepPalette.pink)
+                        DiaryTag(text: "caffeine", tint: SleepPalette.green)
                     }
                 }
                 if let notes = entry.notes, !notes.isEmpty {
@@ -760,33 +771,33 @@ private struct StatsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(eyebrow: "疗程分析", title: "进度要可见，但不要制造焦虑", subtitle: "用温和的图表看趋势，不用生硬 KPI 压你。")
+                SectionHeader(eyebrow: "progress", title: "Soft trends", subtitle: "less pressure")
                 SleepCard {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("近 7 次睡眠质量")
+                            Text("last 7 nights")
                                 .font(.headline.weight(.bold))
                             Spacer()
-                            Text("本周")
+                            Text("week")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SleepPalette.night)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(SleepPalette.night, in: Capsule())
+                                .background(Color.white.opacity(0.06), in: Capsule())
                         }
                         TrendBars(entries: Array(entries.prefix(7).reversed()))
                     }
                 }
                 HStack(spacing: 12) {
-                    MiniStatCard(title: "完成率", value: "\(Int(SleepDataService.completionRate(for: tasks) * 100))%", tint: SleepPalette.yellow, symbol: "checkmark.seal.fill")
-                    MiniStatCard(title: "效率", value: "\(Int(SleepDataService.efficiency(from: entries) * 100))%", tint: SleepPalette.green, symbol: "bed.double.fill")
+                    MiniStatCard(title: "tasks", value: "\(Int(SleepDataService.completionRate(for: tasks) * 100))%", tint: SleepPalette.indigo, symbol: "checkmark.seal.fill")
+                    MiniStatCard(title: "sleep", value: "\(Int(SleepDataService.efficiency(from: entries) * 100))%", tint: SleepPalette.green, symbol: "bed.double.fill")
                 }
                 SleepCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("下一步建议")
+                        Text("next")
                             .font(.headline.weight(.bold))
-                        Text("如果连续 7-14 天效率高于 85%，可以再把睡眠窗口温和放宽 15 分钟。")
-                            .font(.subheadline)
+                        Text("expand the window slowly when sleep feels stable")
+                            .font(.footnote)
                             .foregroundStyle(SleepPalette.textSoft)
                     }
                 }
@@ -832,10 +843,10 @@ private struct LessonsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(eyebrow: "CBTI 工具箱", title: "把内容做成卡片，不要做成说明书", subtitle: "每一项都该能马上行动，而不是只读一遍。")
-                LessonCard(title: "认知重构", subtitle: "识别“今晚又要完蛋”的自动化想法，并用证据松动它。", tint: SleepPalette.yellow, symbol: "brain.head.profile")
-                LessonCard(title: "刺激控制", subtitle: "只在困倦时上床。超过 20 分钟仍清醒，离开卧室，等睡意回来。", tint: SleepPalette.green, symbol: "figure.walk.motion")
-                LessonCard(title: "放松训练", subtitle: "先做 4-7-8 呼吸，再进入身体扫描，让身体先慢下来。", tint: SleepPalette.pink, symbol: "wind")
+                SectionHeader(eyebrow: "practice", title: "Calm tools", subtitle: "small steps")
+                LessonCard(title: "reframe", subtitle: "notice the thought", tint: SleepPalette.indigo, symbol: "brain.head.profile")
+                LessonCard(title: "leave bed", subtitle: "return when sleepy", tint: SleepPalette.green, symbol: "figure.walk.motion")
+                LessonCard(title: "breathe", subtitle: "slow the body first", tint: SleepPalette.lavender, symbol: "wind")
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -856,7 +867,7 @@ private struct LessonCard: View {
                 .font(.title2)
                 .foregroundStyle(SleepPalette.night)
                 .frame(width: 52, height: 52)
-                .background(tint, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.headline.weight(.bold))
@@ -870,7 +881,10 @@ private struct LessonCard: View {
         }
         .padding(18)
         .background(SleepPalette.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: .black.opacity(0.05), radius: 14, y: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -878,15 +892,15 @@ private struct SettingsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(eyebrow: "偏好设置", title: "让提醒更像陪伴，不像催命", subtitle: "文案、频率和导出都要轻一点。")
-                ToggleCard(title: "睡前提醒", subtitle: "入睡窗口前 30 分钟轻提醒")
-                ToggleCard(title: "起床打卡", subtitle: "固定起床时间提醒")
+                SectionHeader(eyebrow: "settings", title: "Quiet defaults", subtitle: "keep it gentle")
+                ToggleCard(title: "bedtime reminder", subtitle: "30 min before")
+                ToggleCard(title: "wake reminder", subtitle: "same time daily")
                 SleepCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("数据管理")
+                        Text("data")
                             .font(.headline.weight(.bold))
-                        SettingsAction(title: "导出睡眠日记", tint: SleepPalette.lavender)
-                        SettingsAction(title: "重置本地数据", tint: SleepPalette.pink)
+                        SettingsAction(title: "export", tint: SleepPalette.indigo)
+                        SettingsAction(title: "reset", tint: SleepPalette.pink)
                     }
                 }
             }
@@ -908,6 +922,7 @@ private struct ToggleCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
                         .font(.headline.weight(.bold))
+                        .foregroundStyle(SleepPalette.night)
                     Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(SleepPalette.textSoft)
@@ -935,7 +950,7 @@ private struct SettingsAction: View {
                 .frame(width: 10, height: 10)
         }
         .padding(14)
-        .background(tint.opacity(0.25), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -950,10 +965,10 @@ private struct QuickLogSheet: View {
                 AppBackground()
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
-                        SectionHeader(eyebrow: "睡眠记录", title: "用最短路径记录昨晚", subtitle: "减少表单感，把常用字段放到前面。")
+                        SectionHeader(eyebrow: "log", title: "Last night", subtitle: "keep it light")
                         SleepCard {
                             VStack(alignment: .leading, spacing: 16) {
-                                Text("时间")
+                                Text("time")
                                     .font(.headline.weight(.bold))
                                 DatePicker("记录日期", selection: $draft.date, displayedComponents: .date)
                                 DatePicker("就寝时间", selection: $draft.bedtime, displayedComponents: .hourAndMinute)
@@ -963,7 +978,7 @@ private struct QuickLogSheet: View {
                         }
                         SleepCard {
                             VStack(alignment: .leading, spacing: 16) {
-                                Text("主观感受")
+                                Text("feeling")
                                     .font(.headline.weight(.bold))
                                 Stepper("睡眠质量 \(draft.sleepQuality)/10", value: $draft.sleepQuality, in: 1...10)
                                 Stepper("心情 \(draft.moodRating)/10", value: $draft.moodRating, in: 1...10)
@@ -972,7 +987,7 @@ private struct QuickLogSheet: View {
                         }
                         SleepCard {
                             VStack(alignment: .leading, spacing: 16) {
-                                Text("行为线索")
+                                Text("notes")
                                     .font(.headline.weight(.bold))
                                 Toggle("今天摄入咖啡因", isOn: $draft.caffeineIntake)
                                 Stepper("睡前屏幕 \(draft.screenTimeMinutes) 分钟", value: $draft.screenTimeMinutes, in: 0...180, step: 5)
@@ -987,12 +1002,12 @@ private struct QuickLogSheet: View {
                             onSave()
                             dismiss()
                         } label: {
-                            Text("保存这条记录")
+                            Text("save")
                                 .font(.headline.weight(.bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SleepPalette.night)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(SleepPalette.night, in: Capsule())
+                                .background(Color.white.opacity(0.08), in: Capsule())
                         }
                     }
                     .padding(.horizontal, 20)
@@ -1002,7 +1017,7 @@ private struct QuickLogSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") {
+                    Button("close") {
                         dismiss()
                     }
                 }
@@ -1021,12 +1036,12 @@ private struct SectionHeader: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(eyebrow.uppercased())
                 .font(.caption.weight(.bold))
-                .foregroundStyle(SleepPalette.textSoft)
+                .foregroundStyle(SleepPalette.textFaint)
             Text(title)
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(SleepPalette.night)
             Text(subtitle)
-                .font(.subheadline)
+                .font(.footnote)
                 .foregroundStyle(SleepPalette.textSoft)
         }
     }
@@ -1045,6 +1060,7 @@ private struct EmptyStateCard: View {
                 .overlay(Image(systemName: "moon.stars.fill").foregroundStyle(SleepPalette.night))
             Text(title)
                 .font(.headline.weight(.bold))
+                .foregroundStyle(SleepPalette.night)
             Text(subtitle)
                 .font(.subheadline)
                 .foregroundStyle(SleepPalette.textSoft)
@@ -1069,9 +1085,8 @@ private struct SleepCard<Content: View>: View {
             .background(SleepPalette.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color.white.opacity(0.75), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.05), radius: 18, y: 10)
     }
 }
 
