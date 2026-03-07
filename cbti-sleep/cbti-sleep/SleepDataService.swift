@@ -85,11 +85,11 @@ struct SleepDataService {
 
         let message: String
         if minutes > 0 {
-            message = "Sleep efficiency is \(pct)%. Expanding your window by \(minutes) minutes."
+            message = "Efficiency \(pct)%. Window +\(minutes) min."
         } else if minutes < 0 {
-            message = "Sleep efficiency is \(pct)%. Tightening your window by \(abs(minutes)) minutes."
+            message = "Efficiency \(pct)%. Window -\(abs(minutes)) min."
         } else {
-            message = "Sleep efficiency is \(pct)%. Maintaining current window."
+            message = "Efficiency \(pct)%. Keep the same window."
         }
         return WindowAdjustment(minutes: minutes, efficiencyPercent: pct, message: message)
     }
@@ -98,15 +98,15 @@ struct SleepDataService {
 
     static func coachMessage(efficiency: Double, entryCount: Int) -> String {
         guard entryCount > 0 else {
-            return "Start logging your sleep to receive personalized guidance."
+            return "Log your sleep to get guidance."
         }
         let pct = Int(efficiency * 100)
         if efficiency > 0.90 {
-            return "Efficiency at \(pct)% — your sleep is consolidating well. We can expand the window."
+            return "Efficiency \(pct)%. Sleep is consolidating. Expand the window."
         } else if efficiency >= 0.85 {
-            return "Efficiency at \(pct)%. You're on track. Keep this sleep window."
+            return "Efficiency \(pct)%. On track. Keep this window."
         } else {
-            return "Efficiency at \(pct)%. We'll tighten the window to build sleep pressure."
+            return "Efficiency \(pct)%. Tighten the window to build pressure."
         }
     }
 
@@ -132,15 +132,15 @@ struct SleepDataService {
         let actualWakeMinutes = entry.wakeTime.map(minutesSinceMidnight(for:)) ?? plannedWakeMinutes
 
         if actualBedMinutes - plannedBedMinutes >= 30 {
-            return "You went to bed later than planned. This is common during CBTI. Try to keep the wake-up time fixed."
+            return "Bedtime was later than planned. Keep wake time fixed."
         }
 
         if plannedBedMinutes - actualBedMinutes >= 30 {
-            return "You went to bed earlier than planned. During CBTI, keeping a stable sleep window usually works better than chasing more time in bed."
+            return "Bedtime was earlier than planned. Keep the window stable."
         }
 
         if abs(actualWakeMinutes - plannedWakeMinutes) >= 30 {
-            return "Your wake-up time drifted from the plan. Try to anchor the morning first, even if the night was rough."
+            return "Wake time drifted. Anchor the morning first."
         }
 
         return nil

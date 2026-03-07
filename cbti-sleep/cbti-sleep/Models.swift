@@ -79,7 +79,8 @@ final class SleepDiaryEntry {
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
         return formatter
     }()
 }
@@ -172,6 +173,19 @@ enum FallAsleepOption: String, CaseIterable {
         case .tenToTwenty: return 15
         case .twentyToForty: return 30
         case .overForty: return 50
+        }
+    }
+
+    init(minutes: Int) {
+        switch minutes {
+        case ..<10:
+            self = .underTen
+        case 10..<20:
+            self = .tenToTwenty
+        case 20..<40:
+            self = .twentyToForty
+        default:
+            self = .overForty
         }
     }
 }

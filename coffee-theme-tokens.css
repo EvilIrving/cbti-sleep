@@ -1,0 +1,149 @@
+:root {
+  /* Core palette - coffee theme */
+  --coffee-50: #f8f3ef;
+  --coffee-100: #efe2d8;
+  --coffee-200: #dcc4b1;
+  --coffee-300: #c8a58b;
+  --coffee-400: #b28767;
+  --coffee-500: #996d4f;
+  --coffee-600: #7e573f;
+  --coffee-700: #664636;
+  --coffee-800: #4e362b;
+  --coffee-900: #38261f;
+  --coffee-950: #231611;
+
+  /* Accent palette */
+  --latte-100: #fff7ef;
+  --latte-200: #f7e6d4;
+  --latte-300: #efd5b9;
+  --mocha-400: #9b7a66;
+  --mocha-500: #7f6251;
+  --espresso-700: #4a352a;
+  --espresso-800: #35241c;
+
+  /* Text */
+  --text-primary: var(--coffee-900);
+  --text-secondary: #5f4b3f;
+  --text-tertiary: #7a665a;
+  --text-inverse: #fffaf5;
+  --text-link: var(--coffee-700);
+
+  /* Background */
+  --bg-canvas: #f5eee8;
+  --bg-surface: #fffaf5;
+  --bg-surface-elevated: #fffdfb;
+  --bg-muted: #ede2d8;
+  --bg-inverse: var(--coffee-900);
+
+  /* Border */
+  --border-default: #d9c8bb;
+  --border-strong: #bca18f;
+  --border-subtle: #e8dbd0;
+  --border-focus: #8b6144;
+
+  /* Brand / interactive */
+  --brand-primary: var(--coffee-600);
+  --brand-primary-hover: var(--coffee-700);
+  --brand-primary-active: var(--coffee-800);
+  --brand-secondary: #c9a78f;
+  --brand-secondary-hover: #b89277;
+
+  /* Status */
+  --success: #4f6f4e;
+  --warning: #a36a2f;
+  --error: #a34444;
+  --info: #4a6484;
+
+  /* Status backgrounds */
+  --success-bg: #e7f1e6;
+  --warning-bg: #f8ecdd;
+  --error-bg: #f8e3e3;
+  --info-bg: #e6edf6;
+
+  /* Shadows (soft warm tone) */
+  --shadow-sm: 0 1px 2px rgba(35, 22, 17, 0.12);
+  --shadow-md: 0 6px 18px rgba(35, 22, 17, 0.14);
+  --shadow-lg: 0 14px 32px rgba(35, 22, 17, 0.18);
+
+  /* Radius */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Typography */
+  --font-family-base: "Inter", "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 28px;
+
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Optional: dark coffee mode */
+[data-theme="coffee-dark"] {
+  --text-primary: #f6eee7;
+  --text-secondary: #dbc8ba;
+  --text-tertiary: #b8a293;
+  --text-inverse: #261913;
+  --text-link: #e5cdbb;
+
+  --bg-canvas: #1d120e;
+  --bg-surface: #271a14;
+  --bg-surface-elevated: #312118;
+  --bg-muted: #3a2a21;
+  --bg-inverse: #f4e9de;
+
+  --border-default: #4a372c;
+  --border-strong: #664b3c;
+  --border-subtle: #3b2c24;
+  --border-focus: #c89674;
+
+  --brand-primary: #b78767;
+  --brand-primary-hover: #c89877;
+  --brand-primary-active: #d6a889;
+  --brand-secondary: #7f6251;
+  --brand-secondary-hover: #937161;
+
+  --success: #9dc79b;
+  --warning: #efba7e;
+  --error: #e59696;
+  --info: #9ab7dd;
+
+  --success-bg: rgba(98, 145, 92, 0.18);
+  --warning-bg: rgba(196, 131, 63, 0.2);
+  --error-bg: rgba(171, 81, 81, 0.2);
+  --info-bg: rgba(84, 122, 173, 0.2);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.38);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 18px 38px rgba(0, 0, 0, 0.5);
+}

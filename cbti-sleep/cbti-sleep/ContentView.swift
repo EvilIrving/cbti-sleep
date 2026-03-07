@@ -15,7 +15,7 @@ private extension Color {
     }
 }
 
-private enum Theme {
+enum Theme {
     static let bgPrimary = Color(hex: 0x0B1020)
     static let bgSecondary = Color(hex: 0x121833)
     static let cardBg = Color(hex: 0x1B2345)
@@ -62,16 +62,13 @@ private struct SleepEntryDraft {
 }
 
 private enum SleepEditorDestination: Identifiable {
-    case checkIn
-    case manual
+    case createLastNight
     case edit(SleepDiaryEntry)
 
     var id: String {
         switch self {
-        case .checkIn:
-            return "checkIn"
-        case .manual:
-            return "manual"
+        case .createLastNight:
+            return "createLastNight"
         case .edit(let entry):
             return "edit-\(ObjectIdentifier(entry))"
         }
@@ -79,12 +76,10 @@ private enum SleepEditorDestination: Identifiable {
 
     var title: String {
         switch self {
-        case .checkIn:
-            return "Morning Check-in"
-        case .manual:
-            return "Log Sleep"
+        case .createLastNight:
+            return "Record Last Night"
         case .edit:
-            return "Edit Last Night"
+            return "Edit Sleep Log"
         }
     }
 
@@ -93,6 +88,13 @@ private enum SleepEditorDestination: Identifiable {
             return entry
         }
         return nil
+    }
+
+    var isNewEntry: Bool {
+        if case .createLastNight = self {
+            return true
+        }
+        return false
     }
 }
 
@@ -110,7 +112,7 @@ struct ContentView: View {
     @State private var seeded = false
 
     @AppStorage("pendingBedtime") private var pendingBedtimeTS: Double = 0
-    @AppStorage("targetWakeHour") private var targetWakeHour = 7
+    @AppStorage("targetWakeHour") private var targetWakeHour = 8
     @AppStorage("targetWakeMinute") private var targetWakeMinute = 0
     @AppStorage("lastAdjustWeek") private var lastAdjustWeek = 0
     @AppStorage("lastCantSleepEvent") private var lastCantSleepEventTS: Double = 0
@@ -123,10 +125,6 @@ struct ContentView: View {
         return diaryEntries.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
     }
 
-    private var lastEntry: SleepDiaryEntry? {
-        todayEntry ?? diaryEntries.first
-    }
-
     private var pendingBedtime: Date? {
         guard pendingBedtimeTS > 0 else { return nil }
         return Date(timeIntervalSince1970: pendingBedtimeTS)
@@ -137,8 +135,8 @@ struct ContentView: View {
     }
 
     private var driftMessage: String? {
-        guard let lastEntry else { return nil }
-        return SleepDataService.driftMessage(for: lastEntry, plannedWindow: currentWindow)
+        guard let todayEntry else { return nil }
+        return SleepDataService.driftMessage(for: todayEntry, plannedWindow: currentWindow)
     }
 
     var body: some View {
@@ -149,14 +147,13 @@ struct ContentView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         HomeContent(
                             entries: diaryEntries,
-                            lastEntry: lastEntry,
+                            todayEntry: todayEntry,
                             window: currentWindow,
                             efficiency: efficiency,
                             needsCheckIn: needsCheckIn,
                             pendingBedtime: pendingBedtime,
                             driftMessage: driftMessage,
-                            onCheckIn: { editorDestination = .checkIn },
-                            onEditLastNight: openLastNightEditor,
+                            onCreateLastNight: { editorDestination = .createLastNight },
                             onBedtime: { showBedtimeFlow = true }
                         )
                         .padding(.horizontal, Theme.hPad)
@@ -176,11 +173,16 @@ struct ContentView: View {
             NavigationStack {
                 ZStack {
                     AppBg()
-                    SleepProgressView(entries: diaryEntries)
+                    SleepHistoryView(
+                        entries: diaryEntries,
+                        onEdit: { entry in
+                            editorDestination = .edit(entry)
+                        }
+                    )
                 }
                 .navigationBarHidden(true)
             }
-            .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }
+            .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             .tag(1)
 
             NavigationStack {
@@ -199,12 +201,7 @@ struct ContentView: View {
                 title: destination.title,
                 plannedWindow: currentWindow,
                 initialDraft: draft(for: destination),
-                isCheckIn: {
-                    if case .checkIn = destination {
-                        return true
-                    }
-                    return false
-                }(),
+                isNewEntry: destination.isNewEntry,
                 onSave: { draft in
                     saveSleepEntry(draft, editing: destination.editingEntry)
                 }
@@ -228,11 +225,16 @@ struct ContentView: View {
 
     private func seedIfNeeded() {
         guard !seeded else { return }
+//        if enableMockSleepSeedData, diaryEntries.isEmpty {
+//            seedMockSleepEntries()
+//            lastAdjustWeek = currentWeekKey()
+//        }
         if windows.isEmpty {
             let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-            let wake = Calendar.current.date(
+            let requestedWake = Calendar.current.date(
                 bySettingHour: targetWakeHour, minute: targetWakeMinute, second: 0, of: tomorrow
             ) ?? tomorrow
+            let wake = clampedTargetWakeDate(requestedWake)
             modelContext.insert(SleepWindow(start: wake.addingTimeInterval(-6 * 3600), end: wake))
         }
         if configs.isEmpty {
@@ -244,7 +246,7 @@ struct ContentView: View {
 
     private func checkWeeklyAdjust() {
         let cal = Calendar.current
-        let weekKey = cal.component(.year, from: Date()) * 100 + cal.component(.weekOfYear, from: Date())
+        let weekKey = currentWeekKey()
         guard weekKey != lastAdjustWeek else { return }
 
         let recent = Array(diaryEntries.prefix(7))
@@ -263,40 +265,58 @@ struct ContentView: View {
         if delta != 0 {
             let newDuration = min(max(current.duration + delta, 5 * 3600), 9 * 3600)
             let tomorrow = cal.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-            let wake = cal.date(
+            let requestedWake = cal.date(
                 bySettingHour: targetWakeHour, minute: targetWakeMinute, second: 0, of: tomorrow
             ) ?? tomorrow
+            let wake = clampedTargetWakeDate(requestedWake)
             modelContext.insert(SleepWindow(start: wake.addingTimeInterval(-newDuration), end: wake))
             try? modelContext.save()
         }
         lastAdjustWeek = weekKey
     }
 
-    private func openLastNightEditor() {
-        if let todayEntry {
-            editorDestination = .edit(todayEntry)
-        } else if needsCheckIn {
-            editorDestination = .checkIn
-        } else {
-            editorDestination = .manual
+    private func seedMockSleepEntries() {
+        for (daysBack, sample) in mockSleepSeedEntries.enumerated() {
+            let wakeDay = Calendar.current.startOfDay(
+                for: Calendar.current.date(byAdding: .day, value: -daysBack, to: Date()) ?? Date()
+            )
+            let bedtimeBase = mockBedtimeBaseDate(for: sample, wakeDay: wakeDay)
+            let bedtime = Calendar.current.date(
+                bySettingHour: sample.bedtimeHour,
+                minute: sample.bedtimeMinute,
+                second: 0,
+                of: bedtimeBase
+            ) ?? bedtimeBase
+            let wakeTime = Calendar.current.date(
+                bySettingHour: sample.wakeHour,
+                minute: sample.wakeMinute,
+                second: 0,
+                of: wakeDay
+            ) ?? wakeDay
+            let sleepStart = bedtime.addingTimeInterval(TimeInterval(sample.latencyMinutes * 60))
+            modelContext.insert(
+                SleepDiaryEntry(
+                    date: wakeDay,
+                    bedtime: bedtime,
+                    sleepStart: sleepStart,
+                    wakeTime: wakeTime,
+                    sleepQuality: sample.quality,
+                    caffeineIntake: sample.caffeineIntake,
+                    screenTimeMinutes: sample.screenTimeMinutes,
+                    nightAwakenings: sample.awakenings,
+                    moodRating: sample.quality
+                )
+            )
         }
     }
 
     private func draft(for destination: SleepEditorDestination) -> SleepEntryDraft {
         switch destination {
-        case .checkIn:
+        case .createLastNight:
             return SleepEntryDraft(
                 bedtime: defaultBedtime(),
                 wakeTime: defaultWakeTime(),
                 latencyMinutes: pendingBedtime != nil ? 15 : 30,
-                quality: .ok,
-                awakenings: .zero
-            )
-        case .manual:
-            return SleepEntryDraft(
-                bedtime: defaultBedtime(),
-                wakeTime: defaultWakeTime(),
-                latencyMinutes: 15,
                 quality: .ok,
                 awakenings: .zero
             )
@@ -332,12 +352,13 @@ struct ContentView: View {
 
     private func defaultWakeTime() -> Date {
         let today = Date()
-        let anchored = Calendar.current.date(
+        let requestedWake = Calendar.current.date(
             bySettingHour: targetWakeHour,
             minute: targetWakeMinute,
             second: 0,
             of: today
         ) ?? today
+        let anchored = clampedTargetWakeDate(requestedWake)
         return roundedToQuarterHour(max(anchored, Date()))
     }
 
@@ -407,14 +428,13 @@ private struct AppBg: View {
 
 private struct HomeContent: View {
     let entries: [SleepDiaryEntry]
-    let lastEntry: SleepDiaryEntry?
+    let todayEntry: SleepDiaryEntry?
     let window: SleepWindow?
     let efficiency: Double
     let needsCheckIn: Bool
     let pendingBedtime: Date?
     let driftMessage: String?
-    let onCheckIn: () -> Void
-    let onEditLastNight: () -> Void
+    let onCreateLastNight: () -> Void
     let onBedtime: () -> Void
 
     private var adjustment: SleepDataService.WindowAdjustment? {
@@ -426,34 +446,32 @@ private struct HomeContent: View {
             GreetingHeader()
 
             if needsCheckIn {
-                CheckInBanner(onTap: onCheckIn)
+                CheckInBanner(onTap: onCreateLastNight)
             }
 
             TonightPlanCard(window: window, efficiency: efficiency)
 
-            if let pendingBedtime, lastEntry?.date != Calendar.current.startOfDay(for: Date()) {
+            if let pendingBedtime, todayEntry == nil {
                 PendingBedtimeCard(pendingBedtime: pendingBedtime)
             }
 
             ActionRow(
-                needsCheckIn: needsCheckIn,
-                onEditLastNight: onEditLastNight,
+                showCreateLastNight: todayEntry == nil && !needsCheckIn,
+                onCreateLastNight: onCreateLastNight,
                 onBedtime: onBedtime
             )
 
-            if let lastEntry {
-                ActualSleepCard(entry: lastEntry, onEdit: onEditLastNight)
-            } else {
-                EmptyActualSleepCard(onLog: onEditLastNight)
+            if let todayEntry {
+                ActualSleepCard(entry: todayEntry)
             }
 
             if let driftMessage {
                 GuidanceCard(message: driftMessage, color: Theme.amber, icon: "lightbulb.max")
+            } else if !entries.isEmpty {
+                CoachCard(
+                    message: SleepDataService.coachMessage(efficiency: efficiency, entryCount: entries.count)
+                )
             }
-
-            CoachCard(
-                message: SleepDataService.coachMessage(efficiency: efficiency, entryCount: entries.count)
-            )
 
             if let adj = adjustment, adj.minutes != 0 {
                 AdjustmentCard(adjustment: adj)
@@ -494,16 +512,17 @@ private struct GreetingHeader: View {
 private struct TonightPlanCard: View {
     let window: SleepWindow?
     let efficiency: Double
+    private let compactTimeFont: Font = .system(size: 38, weight: .semibold, design: .rounded)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("TONIGHT'S PLAN")
                         .font(Theme.captionFont.weight(.semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .tracking(1.2)
-                    Text("This is your training window, not your log.")
+                    Text("Training window")
                         .font(Theme.captionFont)
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -511,25 +530,26 @@ private struct TonightPlanCard: View {
                 EffBadge(value: efficiency)
             }
 
-            VStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 12) {
                 Text(fmt(window?.start))
-                    .font(Theme.sleepTimeFont)
+                    .font(compactTimeFont)
                     .foregroundStyle(Theme.textPrimary)
-                Image(systemName: "arrow.down")
-                    .font(.body.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Image(systemName: "arrow.right")
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(Theme.textMuted)
                 Text(fmt(window?.end))
-                    .font(Theme.sleepTimeFont)
+                    .font(compactTimeFont)
                     .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity)
 
-            Text("If the night goes differently, edit the actual log tomorrow. The plan and the log are separate.")
-                .font(Theme.bodyFont)
-                .foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text("Plan vs actual are separate.")
+                .font(Theme.captionFont)
+                .foregroundStyle(Theme.textMuted)
         }
-        .padding(24)
+        .padding(18)
         .background(
             LinearGradient(
                 colors: [Theme.cardBg, Theme.cardGradientEnd],
@@ -555,7 +575,7 @@ private struct PendingBedtimeCard: View {
 
     var body: some View {
         GuidanceCard(
-            message: "Bedtime started at \(dateTimeFormatter.string(from: pendingBedtime)). Finish the morning check-in after you wake up, then correct anything that happened differently.",
+            message: "Bedtime started at \(dateTimeFormatter.string(from: pendingBedtime)). Log the rest in the morning.",
             color: Theme.indigo,
             icon: "bed.double.fill"
         )
@@ -594,13 +614,14 @@ private struct CheckInBanner: View {
                     Text("Morning Check-in")
                         .font(Theme.headlineFont)
                         .foregroundStyle(Theme.textPrimary)
-                    Text("Record what actually happened last night")
+                    Text("Record last night's sleep.")
                         .font(Theme.captionFont)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(Theme.textMuted)
+                Text("Open")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.amber)
             }
             .padding(18)
             .background(
@@ -612,40 +633,43 @@ private struct CheckInBanner: View {
                     .stroke(Theme.amber.opacity(0.25), lineWidth: 1)
             )
         }
+        .buttonStyle(.plain)
     }
 }
 
 private struct ActionRow: View {
-    let needsCheckIn: Bool
-    let onEditLastNight: () -> Void
+    let showCreateLastNight: Bool
+    let onCreateLastNight: () -> Void
     let onBedtime: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onEditLastNight) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(needsCheckIn ? "Log Last Night" : "Edit Last Night")
-                        .font(Theme.headlineFont)
-                    Text("Fix actual times")
-                        .font(Theme.captionFont)
-                        .foregroundStyle(.white.opacity(0.75))
+            if showCreateLastNight {
+                Button(action: onCreateLastNight) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Record Last Night")
+                            .font(Theme.headlineFont)
+                        Text("Create sleep log")
+                            .font(Theme.captionFont)
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: Theme.btnH)
+                    .padding(.horizontal, 18)
+                    .background(Theme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: Theme.btnH)
-                .padding(.horizontal, 18)
-                .background(Theme.cardBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
+                .foregroundStyle(Theme.textPrimary)
             }
-            .foregroundStyle(Theme.textPrimary)
 
             Button(action: onBedtime) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("I'm Going To Bed")
                         .font(Theme.headlineFont)
-                    Text("Start bedtime mode")
+                    Text("Start bedtime")
                         .font(Theme.captionFont)
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -661,7 +685,6 @@ private struct ActionRow: View {
 
 private struct ActualSleepCard: View {
     let entry: SleepDiaryEntry
-    let onEdit: () -> Void
 
     var body: some View {
         CBTICard {
@@ -671,17 +694,11 @@ private struct ActualSleepCard: View {
                         Text("Last Night")
                             .font(Theme.headlineFont)
                             .foregroundStyle(Theme.textPrimary)
-                        Text("Actual sleep log")
+                        Text("Recorded sleep")
                             .font(Theme.captionFont)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     Spacer()
-                    Button("Edit") {
-                        onEdit()
-                    }
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Theme.indigo)
                 }
 
                 HStack(spacing: 12) {
@@ -702,32 +719,6 @@ private struct ActualSleepCard: View {
     private var latencyText: String {
         guard let latency = entry.sleepLatencyMinutes else { return "--" }
         return "\(latency)m"
-    }
-}
-
-private struct EmptyActualSleepCard: View {
-    let onLog: () -> Void
-
-    var body: some View {
-        CBTICard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Last Night")
-                    .font(Theme.headlineFont)
-                    .foregroundStyle(Theme.textPrimary)
-                Text("No actual sleep log yet. Record what really happened so CBTI can adjust from real data, not guesses.")
-                    .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Log Sleep") {
-                    onLog()
-                }
-                .font(Theme.headlineFont)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: Theme.btnH)
-                .background(Theme.indigo, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            }
-        }
     }
 }
 
@@ -828,7 +819,7 @@ private struct AdjustmentCard: View {
 private struct SleepEntryFormView: View {
     let title: String
     let plannedWindow: SleepWindow?
-    let isCheckIn: Bool
+    let isNewEntry: Bool
     let onSave: (SleepEntryDraft) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -838,17 +829,22 @@ private struct SleepEntryFormView: View {
         title: String,
         plannedWindow: SleepWindow?,
         initialDraft: SleepEntryDraft,
-        isCheckIn: Bool,
+        isNewEntry: Bool,
         onSave: @escaping (SleepEntryDraft) -> Void
     ) {
         self.title = title
         self.plannedWindow = plannedWindow
-        self.isCheckIn = isCheckIn
+        self.isNewEntry = isNewEntry
         self.onSave = onSave
-        _draft = State(initialValue: initialDraft)
+        let normalized = normalizedSleepRange(bedtime: initialDraft.bedtime, wakeTime: initialDraft.wakeTime)
+        _draft = State(initialValue: SleepEntryDraft(
+            bedtime: normalized.bedtime,
+            wakeTime: normalized.wakeTime,
+            latencyMinutes: initialDraft.latencyMinutes,
+            quality: initialDraft.quality,
+            awakenings: initialDraft.awakenings
+        ))
     }
-
-    private let latencyOptions = Array(stride(from: 0, through: 240, by: 15))
 
     private var validationMessage: String? {
         if draft.wakeTime <= draft.bedtime {
@@ -863,126 +859,139 @@ private struct SleepEntryFormView: View {
     private var bedtimeBinding: Binding<Date> {
         Binding(
             get: { draft.bedtime },
-            set: { draft.bedtime = roundedToQuarterHour($0) }
+            set: { updateDraftTimes(bedtime: $0, wakeTime: draft.wakeTime) }
         )
     }
 
     private var wakeTimeBinding: Binding<Date> {
         Binding(
             get: { draft.wakeTime },
-            set: { draft.wakeTime = roundedToQuarterHour($0) }
+            set: { updateDraftTimes(bedtime: draft.bedtime, wakeTime: $0) }
+        )
+    }
+
+    private var latencyOptionBinding: Binding<FallAsleepOption> {
+        Binding(
+            get: { FallAsleepOption(minutes: draft.latencyMinutes) },
+            set: { draft.latencyMinutes = $0.midpointMinutes }
         )
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                if let plannedWindow {
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Tonight's Plan")
-                                .font(Theme.headlineFont)
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("\(timeFormatter.string(from: plannedWindow.start)) - \(timeFormatter.string(from: plannedWindow.end))")
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("This plan trains consistency. The fields below should reflect what actually happened.")
-                                .font(Theme.captionFont)
-                                .foregroundStyle(Theme.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
+            ZStack {
+                AppBg()
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: Theme.cardGap) {
+                        if let plannedWindow {
+                            CBTICard {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Tonight's Plan")
+                                            .font(Theme.headlineFont)
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text("\(timeFormatter.string(from: plannedWindow.start)) - \(timeFormatter.string(from: plannedWindow.end))")
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text("This plan trains consistency. Log what actually happened.")
+                                            .font(Theme.captionFont)
+                                            .foregroundStyle(Theme.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
+                                    TimeOffsetChipsView(
+                                        title: "Planned bedtime",
+                                        baseTimeText: timeFormatter.string(from: plannedWindow.start),
+                                        offsets: [15, 30, 60, 120]
+                                    ) { offset in
+                                        applyPlannedBedtimeOffset(offset)
+                                    }
+                                }
+                            }
                         }
-                        .padding(.vertical, 4)
-                    }
-                    .listRowBackground(Theme.cardBg)
-                }
 
-                Section {
-                    DatePicker(
-                        "Bed time",
-                        selection: bedtimeBinding,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(Theme.indigo)
-
-                    Picker("Sleep latency", selection: $draft.latencyMinutes) {
-                        ForEach(latencyOptions, id: \.self) { value in
-                            Text("\(value) min").tag(value)
+                        CBTICard {
+                            VStack(alignment: .leading, spacing: 18) {
+                                SleepRangeTimelineView(
+                                    title: "Actual Sleep",
+                                    subtitle: "Drag bedtime and wake time. Saved automatically.",
+                                    startDate: bedtimeBinding,
+                                    endDate: wakeTimeBinding
+                                )
+                            }
                         }
-                    }
 
-                    DatePicker(
-                        "Wake time",
-                        selection: wakeTimeBinding,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(Theme.indigo)
-                } header: {
-                    Text("Actual Sleep")
-                } footer: {
-                    Text("Times snap to 15-minute steps so correction stays quick.")
-                }
-                .listRowBackground(Theme.cardBg)
+                        CBTICard {
+                            VStack(alignment: .leading, spacing: 18) {
+                                SelectionChipGroup(
+                                    title: "Sleep latency",
+                                    options: FallAsleepOption.allCases,
+                                    selection: latencyOptionBinding
+                                ) { option in
+                                    option.rawValue
+                                }
 
-                Section {
-                    Picker("Sleep quality", selection: $draft.quality) {
-                        ForEach(SleepQualityOption.allCases, id: \.self) { option in
-                            Text(option.rawValue).tag(option)
+                                SelectionChipGroup(
+                                    title: "Sleep quality",
+                                    options: SleepQualityOption.allCases,
+                                    selection: $draft.quality
+                                ) { option in
+                                    option.rawValue
+                                }
+
+                                SelectionChipGroup(
+                                    title: "Awakenings",
+                                    options: AwakeningsOption.allCases,
+                                    selection: $draft.awakenings
+                                ) { option in
+                                    option.displayText
+                                }
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
 
-                    Picker("Awakenings", selection: $draft.awakenings) {
-                        ForEach(AwakeningsOption.allCases, id: \.self) { option in
-                            Text(option.displayText).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Subjective Check-in")
-                }
-                .listRowBackground(Theme.cardBg)
+                        CBTICard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("From This Log")
+                                    .font(Theme.headlineFont)
+                                    .foregroundStyle(Theme.textPrimary)
 
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Estimated sleep time")
-                            Spacer()
-                            Text(timeFormatter.string(from: draft.sleepStart))
-                        }
-                        HStack {
-                            Text("Estimated duration")
-                            Spacer()
-                            Text(durationFormatter(draft.wakeTime.timeIntervalSince(draft.sleepStart)))
-                        }
-                    }
-                    .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textPrimary)
-                } header: {
-                    Text("Derived From Actual Log")
-                }
-                .listRowBackground(Theme.cardBg)
+                                HStack {
+                                    Text("Estimated sleep time")
+                                    Spacer()
+                                    Text(timeFormatter.string(from: draft.sleepStart))
+                                }
 
-                if let validationMessage {
-                    Section {
-                        Text(validationMessage)
+                                HStack {
+                                    Text("Estimated duration")
+                                    Spacer()
+                                    Text(durationFormatter(draft.wakeTime.timeIntervalSince(draft.sleepStart)))
+                                }
+                            }
                             .font(Theme.bodyFont)
-                            .foregroundStyle(Theme.red)
+                            .foregroundStyle(Theme.textPrimary)
+                        }
+
+                        if let validationMessage {
+                            CBTICard {
+                                Text(validationMessage)
+                                    .font(Theme.bodyFont)
+                                    .foregroundStyle(Theme.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } else if isNewEntry {
+                            CBTICard {
+                                Text("Log what happened. CBTI works best with real nights.")
+                                    .font(Theme.bodyFont)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
-                    .listRowBackground(Theme.cardBg)
-                } else if isCheckIn {
-                    Section {
-                        Text("If you did not follow the plan exactly, edit the actual times here anyway. CBTI works best with real behavior.")
-                            .font(Theme.bodyFont)
-                            .foregroundStyle(Theme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .listRowBackground(Theme.cardBg)
+                    .padding(.horizontal, Theme.hPad)
+                    .padding(.top, 16)
+                    .padding(.bottom, 100)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(AppBg())
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1001,6 +1010,24 @@ private struct SleepEntryFormView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func applyPlannedBedtimeOffset(_ offset: Int) {
+        guard let plannedWindow else { return }
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: plannedWindow.start)
+        let minute = calendar.component(.minute, from: plannedWindow.start)
+        let base = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: draft.bedtime) ?? draft.bedtime
+        updateDraftTimes(
+            bedtime: base.addingTimeInterval(TimeInterval(offset * 60)),
+            wakeTime: draft.wakeTime
+        )
+    }
+
+    private func updateDraftTimes(bedtime: Date, wakeTime: Date) {
+        let normalized = normalizedSleepRange(bedtime: bedtime, wakeTime: wakeTime)
+        draft.bedtime = normalized.bedtime
+        draft.wakeTime = normalized.wakeTime
     }
 }
 
@@ -1064,7 +1091,7 @@ private struct RoutineScreen: View {
                 .foregroundStyle(Theme.textPrimary)
                 .padding(.bottom, 12)
 
-            Text("Tap when you actually get into bed. You can correct tomorrow if the night changes.")
+            Text("Tap when you get into bed. You can fix it tomorrow.")
                 .font(Theme.bodyFont)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -1132,7 +1159,7 @@ private struct SleepModeScreen: View {
             Text("Good Night")
                 .font(Theme.largeTitleFont)
                 .foregroundStyle(Theme.textPrimary.opacity(0.8))
-            Text("If you cannot fall asleep after a while, use the guidance below.")
+            Text("If you can't fall asleep, use the guidance below.")
                 .font(Theme.bodyFont)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -1183,7 +1210,7 @@ private struct CantSleepGuidanceView: View {
                 }
 
                 Section {
-                    Text("A rough night does not mean the plan failed. Keep the wake-up time stable and log what actually happened in the morning.")
+                    Text("A rough night doesn't mean the plan failed. Keep wake time stable and log the morning.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1200,9 +1227,101 @@ private struct CantSleepGuidanceView: View {
     }
 }
 
-// MARK: - Progress Screen
+// MARK: - History Screen
 
-private struct SleepProgressView: View {
+private struct SleepHistoryView: View {
+    let entries: [SleepDiaryEntry]
+    let onEdit: (SleepDiaryEntry) -> Void
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Theme.cardGap) {
+                Text("History")
+                    .font(Theme.largeTitleFont)
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.top, 16)
+
+                SleepProgressSummary(entries: entries)
+
+                if entries.isEmpty {
+                    CBTICard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("No sleep logs yet")
+                                .font(Theme.headlineFont)
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("Your logs show up here. Tap a night to edit.")
+                                .font(Theme.bodyFont)
+                                .foregroundStyle(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } else {
+                    Text("Sleep Logs")
+                        .font(Theme.headlineFont)
+                        .foregroundStyle(Theme.textPrimary)
+
+                    ForEach(entries) { entry in
+                        Button {
+                            onEdit(entry)
+                        } label: {
+                            HistoryEntryCard(entry: entry)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.hPad)
+            .padding(.bottom, 100)
+        }
+    }
+}
+
+private struct HistoryEntryCard: View {
+    let entry: SleepDiaryEntry
+
+    var body: some View {
+        CBTICard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(dateText)
+                                .font(Theme.headlineFont)
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("Tap to edit")
+                                .font(Theme.captionFont)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Theme.textMuted)
+                }
+
+                HStack(spacing: 12) {
+                    MetricItem(label: "Bedtime", value: entry.formattedBedtime)
+                    MetricItem(label: "Sleep", value: entry.formattedSleepStart)
+                    MetricItem(label: "Wake", value: entry.formattedWakeTime)
+                }
+
+                HStack(spacing: 12) {
+                    MetricItem(label: "Latency", value: latencyText)
+                    MetricItem(label: "Duration", value: entry.formattedDuration)
+                    MetricItem(label: "Quality", value: "\(entry.sleepQuality)/10")
+                }
+            }
+        }
+    }
+
+    private var dateText: String {
+        historyDateFormatter.string(from: entry.date)
+    }
+
+    private var latencyText: String {
+        guard let latency = entry.sleepLatencyMinutes else { return "--" }
+        return "\(latency)m"
+    }
+}
+
+private struct SleepProgressSummary: View {
     let entries: [SleepDiaryEntry]
 
     private var recent14: [SleepDiaryEntry] { Array(entries.prefix(14)) }
@@ -1218,6 +1337,94 @@ private struct SleepProgressView: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Progress")
+                .font(Theme.headlineFont)
+                .foregroundStyle(Theme.textPrimary)
+
+            CBTICard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Sleep Efficiency — 14 Days")
+                        .font(Theme.headlineFont)
+                        .foregroundStyle(Theme.textPrimary)
+
+                    if chartData.count >= 2 {
+                        Chart(chartData) { point in
+                            LineMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Efficiency", point.eff)
+                            )
+                            .foregroundStyle(Theme.indigo)
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5))
+
+                            AreaMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Efficiency", point.eff)
+                            )
+                            .foregroundStyle(
+                                .linearGradient(
+                                    colors: [Theme.indigo.opacity(0.25), .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .interpolationMethod(.catmullRom)
+
+                            PointMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Efficiency", point.eff)
+                            )
+                            .foregroundStyle(Theme.indigo)
+                            .symbolSize(30)
+                        }
+                        .chartYScale(domain: 40...100)
+                        .chartXAxis {
+                            AxisMarks(values: .stride(by: .day, count: 3)) {
+                                AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                        }
+                        .chartYAxis {
+                            AxisMarks(position: .leading, values: [50, 70, 90]) {
+                                AxisValueLabel()
+                                    .foregroundStyle(Theme.textMuted)
+                                AxisGridLine()
+                                    .foregroundStyle(Theme.textMuted.opacity(0.15))
+                            }
+                        }
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "chart.xyaxis.line")
+                                .font(.largeTitle)
+                                .foregroundStyle(Theme.textMuted)
+                            Text("Need at least 2 logs to show trends")
+                                .font(Theme.bodyFont)
+                                .foregroundStyle(Theme.textMuted)
+                        }
+                        .frame(height: 200)
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                StatCard(label: "Avg Efficiency", value: "\(Int(avgEff * 100))%", color: Theme.indigo)
+                StatCard(label: "Avg Sleep", value: durationFormatter(avgSleep), color: Theme.green)
+                StatCard(label: "Awakenings", value: String(format: "%.1f", avgWakes), color: Theme.amber)
+            }
+        }
+    }
+}
+
+// MARK: - Progress Screen
+
+private struct SleepProgressView: View {
+    let entries: [SleepDiaryEntry]
+
+    var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.cardGap) {
                 Text("Progress")
@@ -1225,78 +1432,7 @@ private struct SleepProgressView: View {
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.top, 16)
 
-                CBTICard {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Sleep Efficiency — 14 Days")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(Theme.textPrimary)
-
-                        if chartData.count >= 2 {
-                            Chart(chartData) { point in
-                                LineMark(
-                                    x: .value("Date", point.date, unit: .day),
-                                    y: .value("Efficiency", point.eff)
-                                )
-                                .foregroundStyle(Theme.indigo)
-                                .interpolationMethod(.catmullRom)
-                                .lineStyle(StrokeStyle(lineWidth: 2.5))
-
-                                AreaMark(
-                                    x: .value("Date", point.date, unit: .day),
-                                    y: .value("Efficiency", point.eff)
-                                )
-                                .foregroundStyle(
-                                    .linearGradient(
-                                        colors: [Theme.indigo.opacity(0.25), .clear],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .interpolationMethod(.catmullRom)
-
-                                PointMark(
-                                    x: .value("Date", point.date, unit: .day),
-                                    y: .value("Efficiency", point.eff)
-                                )
-                                .foregroundStyle(Theme.indigo)
-                                .symbolSize(30)
-                            }
-                            .chartYScale(domain: 40...100)
-                            .chartXAxis {
-                                AxisMarks(values: .stride(by: .day, count: 3)) {
-                                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
-                                        .foregroundStyle(Theme.textMuted)
-                                }
-                            }
-                            .chartYAxis {
-                                AxisMarks(position: .leading, values: [50, 70, 90]) {
-                                    AxisValueLabel()
-                                        .foregroundStyle(Theme.textMuted)
-                                    AxisGridLine()
-                                        .foregroundStyle(Theme.textMuted.opacity(0.15))
-                                }
-                            }
-                            .frame(height: 200)
-                        } else {
-                            VStack(spacing: 12) {
-                                Image(systemName: "chart.xyaxis.line")
-                                    .font(.largeTitle)
-                                    .foregroundStyle(Theme.textMuted)
-                                Text("Need at least 2 actual logs to show trends")
-                                    .font(Theme.bodyFont)
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-                            .frame(height: 200)
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    StatCard(label: "Avg Efficiency", value: "\(Int(avgEff * 100))%", color: Theme.indigo)
-                    StatCard(label: "Avg Sleep", value: durationFormatter(avgSleep), color: Theme.green)
-                    StatCard(label: "Awakenings", value: String(format: "%.1f", avgWakes), color: Theme.amber)
-                }
+                SleepProgressSummary(entries: entries)
             }
             .padding(.horizontal, Theme.hPad)
             .padding(.bottom, 100)
@@ -1341,15 +1477,16 @@ private struct SleepSettingsView: View {
     private var wakeDate: Binding<Date> {
         Binding(
             get: {
-                Calendar.current.date(
+                let requestedWake = Calendar.current.date(
                     bySettingHour: wakeHour,
                     minute: wakeMinute,
                     second: 0,
                     of: Date()
                 ) ?? Date()
+                return clampedTargetWakeDate(requestedWake)
             },
             set: {
-                let rounded = roundedToQuarterHour($0)
+                let rounded = clampedTargetWakeDate($0)
                 wakeHour = Calendar.current.component(.hour, from: rounded)
                 wakeMinute = Calendar.current.component(.minute, from: rounded)
             }
@@ -1398,21 +1535,12 @@ private struct SleepSettingsView: View {
 
                 CBTICard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("Sleep Plan")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(Theme.textPrimary)
-                        DatePicker(
-                            "Target Wake Time",
-                            selection: wakeDate,
-                            displayedComponents: .hourAndMinute
+                        SingleTimeSliderView(
+                            title: "Target Wake Time",
+                            subtitle: nil,
+                            date: wakeDate,
+                            bounds: targetWakeBoundsMinutes
                         )
-                        .datePickerStyle(.compact)
-                        .tint(Theme.indigo)
-                        .foregroundStyle(Theme.textPrimary)
-
-                        Text("This changes the CBTI plan anchor. Actual sleep logs are edited separately on Home.")
-                            .font(Theme.captionFont)
-                            .foregroundStyle(Theme.textSecondary)
                     }
                 }
 
@@ -1466,7 +1594,8 @@ private struct CBTICard<Content: View>: View {
 
 private let timeFormatter: DateFormatter = {
     let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm"
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
     return formatter
 }()
 
@@ -1477,10 +1606,97 @@ private let dateTimeFormatter: DateFormatter = {
     return formatter
 }()
 
+private let historyDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter
+}()
+
+// Testing only. Set to false or comment out the seed block in `seedIfNeeded()`.
+private let enableMockSleepSeedData = true
+
+private let targetWakeBoundsMinutes: ClosedRange<Int> = (6 * 60)...(12 * 60)
+
+private struct MockSleepSeedSample {
+    let bedtimeHour: Int
+    let bedtimeMinute: Int
+    let wakeHour: Int
+    let wakeMinute: Int
+    let latencyMinutes: Int
+    let quality: Int
+    let awakenings: Int
+    let caffeineIntake: Bool
+    let screenTimeMinutes: Int
+}
+
+private let mockSleepSeedEntries: [MockSleepSeedSample] = [
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 40, wakeHour: 7, wakeMinute: 45, latencyMinutes: 20, quality: 7, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 35),
+    MockSleepSeedSample(bedtimeHour: 0, bedtimeMinute: 5, wakeHour: 8, wakeMinute: 0, latencyMinutes: 30, quality: 6, awakenings: 2, caffeineIntake: true, screenTimeMinutes: 50),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 25, wakeHour: 7, wakeMinute: 30, latencyMinutes: 15, quality: 8, awakenings: 0, caffeineIntake: false, screenTimeMinutes: 20),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 55, wakeHour: 7, wakeMinute: 50, latencyMinutes: 25, quality: 6, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 40),
+    MockSleepSeedSample(bedtimeHour: 0, bedtimeMinute: 20, wakeHour: 8, wakeMinute: 10, latencyMinutes: 40, quality: 5, awakenings: 2, caffeineIntake: true, screenTimeMinutes: 65),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 10, wakeHour: 7, wakeMinute: 20, latencyMinutes: 15, quality: 8, awakenings: 0, caffeineIntake: false, screenTimeMinutes: 25),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 35, wakeHour: 7, wakeMinute: 40, latencyMinutes: 20, quality: 7, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 30),
+    MockSleepSeedSample(bedtimeHour: 0, bedtimeMinute: 15, wakeHour: 8, wakeMinute: 15, latencyMinutes: 35, quality: 5, awakenings: 3, caffeineIntake: true, screenTimeMinutes: 70),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 5, wakeHour: 7, wakeMinute: 10, latencyMinutes: 10, quality: 8, awakenings: 0, caffeineIntake: false, screenTimeMinutes: 15),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 50, wakeHour: 7, wakeMinute: 55, latencyMinutes: 30, quality: 6, awakenings: 2, caffeineIntake: true, screenTimeMinutes: 45),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 20, wakeHour: 7, wakeMinute: 35, latencyMinutes: 15, quality: 7, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 30),
+    MockSleepSeedSample(bedtimeHour: 0, bedtimeMinute: 0, wakeHour: 8, wakeMinute: 5, latencyMinutes: 25, quality: 6, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 35),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 30, wakeHour: 7, wakeMinute: 25, latencyMinutes: 20, quality: 7, awakenings: 1, caffeineIntake: false, screenTimeMinutes: 25),
+    MockSleepSeedSample(bedtimeHour: 23, bedtimeMinute: 45, wakeHour: 7, wakeMinute: 50, latencyMinutes: 15, quality: 8, awakenings: 0, caffeineIntake: false, screenTimeMinutes: 20)
+]
+
 private func roundedToQuarterHour(_ date: Date) -> Date {
     let interval = 15.0 * 60.0
     let rounded = (date.timeIntervalSinceReferenceDate / interval).rounded() * interval
     return Date(timeIntervalSinceReferenceDate: rounded)
+}
+
+private func clampedTargetWakeDate(_ date: Date) -> Date {
+    let rounded = roundedToQuarterHour(date)
+    let components = Calendar.current.dateComponents([.hour, .minute], from: rounded)
+    let minutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    let clampedMinutes = min(max(minutes, targetWakeBoundsMinutes.lowerBound), targetWakeBoundsMinutes.upperBound)
+    let hour = clampedMinutes / 60
+    let minute = clampedMinutes % 60
+    return Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: rounded) ?? rounded
+}
+
+private func currentWeekKey() -> Int {
+    let calendar = Calendar.current
+    return calendar.component(.year, from: Date()) * 100 + calendar.component(.weekOfYear, from: Date())
+}
+
+private func mockBedtimeBaseDate(for sample: MockSleepSeedSample, wakeDay: Date) -> Date {
+    let bedtimeMinutes = sample.bedtimeHour * 60 + sample.bedtimeMinute
+    let wakeMinutes = sample.wakeHour * 60 + sample.wakeMinute
+    if bedtimeMinutes > wakeMinutes {
+        return Calendar.current.date(byAdding: .day, value: -1, to: wakeDay) ?? wakeDay.addingTimeInterval(-24 * 3600)
+    }
+    return wakeDay
+}
+
+private func sleepEditorBounds(for wakeReference: Date) -> ClosedRange<Date> {
+    let wakeDay = Calendar.current.startOfDay(for: wakeReference)
+    let lowerBound = wakeDay.addingTimeInterval(-3 * 3600)
+    let upperBound = wakeDay.addingTimeInterval(12 * 3600)
+    return lowerBound...upperBound
+}
+
+private func normalizedSleepRange(
+    bedtime: Date,
+    wakeTime: Date,
+    minimumGapMinutes: Int = 15
+) -> (bedtime: Date, wakeTime: Date) {
+    let gap = TimeInterval(minimumGapMinutes * 60)
+    let roundedWake = roundedToQuarterHour(wakeTime)
+    let bounds = sleepEditorBounds(for: roundedWake)
+    let clampedWake = min(max(roundedWake, bounds.lowerBound.addingTimeInterval(gap)), bounds.upperBound)
+    let roundedBedtime = roundedToQuarterHour(bedtime)
+    let latestBedtime = clampedWake.addingTimeInterval(-gap)
+    let clampedBedtime = min(max(roundedBedtime, bounds.lowerBound), latestBedtime)
+    return (bedtime: clampedBedtime, wakeTime: clampedWake)
 }
 
 private func snappedLatency(_ minutes: Int) -> Int {
