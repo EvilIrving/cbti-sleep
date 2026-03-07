@@ -63,6 +63,93 @@ struct SleepDataService {
         let completed = tasks.filter(\.isCompleted).count
         return Double(completed) / Double(tasks.count)
     }
+
+    // MARK: - CBTI Weekly Adjustment
+
+    struct WindowAdjustment {
+        let minutes: Int
+        let efficiencyPercent: Int
+        let message: String
+    }
+
+    static func weeklyAdjustment(from entries: [SleepDiaryEntry], currentWindow: SleepWindow?) -> WindowAdjustment? {
+        let recent = Array(entries.prefix(7))
+        guard recent.count >= 5 else { return nil }
+
+        let eff = efficiency(from: recent)
+        let pct = Int(eff * 100)
+        let minutes: Int
+        if eff > 0.90 { minutes = 15 }
+        else if eff < 0.85 { minutes = -15 }
+        else { minutes = 0 }
+
+        let message: String
+        if minutes > 0 {
+            message = "Sleep efficiency is \(pct)%. Expanding your window by \(minutes) minutes."
+        } else if minutes < 0 {
+            message = "Sleep efficiency is \(pct)%. Tightening your window by \(abs(minutes)) minutes."
+        } else {
+            message = "Sleep efficiency is \(pct)%. Maintaining current window."
+        }
+        return WindowAdjustment(minutes: minutes, efficiencyPercent: pct, message: message)
+    }
+
+    // MARK: - Coach Message
+
+    static func coachMessage(efficiency: Double, entryCount: Int) -> String {
+        guard entryCount > 0 else {
+            return "Start logging your sleep to receive personalized guidance."
+        }
+        let pct = Int(efficiency * 100)
+        if efficiency > 0.90 {
+            return "Efficiency at \(pct)% — your sleep is consolidating well. We can expand the window."
+        } else if efficiency >= 0.85 {
+            return "Efficiency at \(pct)%. You're on track. Keep this sleep window."
+        } else {
+            return "Efficiency at \(pct)%. We'll tighten the window to build sleep pressure."
+        }
+    }
+
+    // MARK: - Aggregate Stats
+
+    static func averageSleepTime(from entries: [SleepDiaryEntry]) -> TimeInterval {
+        let durations = entries.compactMap(\.sleepDuration)
+        guard !durations.isEmpty else { return 0 }
+        return durations.reduce(0, +) / Double(durations.count)
+    }
+
+    static func averageAwakenings(from entries: [SleepDiaryEntry]) -> Double {
+        guard !entries.isEmpty else { return 0 }
+        return Double(entries.map(\.nightAwakenings).reduce(0, +)) / Double(entries.count)
+    }
+
+    static func driftMessage(for entry: SleepDiaryEntry, plannedWindow: SleepWindow?) -> String? {
+        guard let plannedWindow else { return nil }
+
+        let plannedBedMinutes = minutesSinceMidnight(for: plannedWindow.start)
+        let plannedWakeMinutes = minutesSinceMidnight(for: plannedWindow.end)
+        let actualBedMinutes = minutesSinceMidnight(for: entry.bedtime)
+        let actualWakeMinutes = entry.wakeTime.map(minutesSinceMidnight(for:)) ?? plannedWakeMinutes
+
+        if actualBedMinutes - plannedBedMinutes >= 30 {
+            return "You went to bed later than planned. This is common during CBTI. Try to keep the wake-up time fixed."
+        }
+
+        if plannedBedMinutes - actualBedMinutes >= 30 {
+            return "You went to bed earlier than planned. During CBTI, keeping a stable sleep window usually works better than chasing more time in bed."
+        }
+
+        if abs(actualWakeMinutes - plannedWakeMinutes) >= 30 {
+            return "Your wake-up time drifted from the plan. Try to anchor the morning first, even if the night was rough."
+        }
+
+        return nil
+    }
+
+    nonisolated private static func minutesSinceMidnight(for date: Date) -> Int {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
 }
 
 private extension Array where Element == TimeInterval {
